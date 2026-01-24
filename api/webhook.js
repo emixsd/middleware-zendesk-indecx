@@ -1,6 +1,5 @@
 const axios = require('axios');
 
-// Configurações (vêm das variáveis de ambiente)
 const INDECX_COMPANY_KEY = process.env.INDECX_COMPANY_KEY;
 const ZENDESK_SUBDOMAIN = process.env.ZENDESK_SUBDOMAIN;
 const ZENDESK_EMAIL = process.env.ZENDESK_EMAIL;
@@ -8,99 +7,63 @@ const ZENDESK_API_TOKEN = process.env.ZENDESK_API_TOKEN;
 
 const INDECX_BASE_URL = 'https://indecx.com/v3/integrations';
 
-// Mapeamento das tags para ações IndeCX
 const TAG_TO_ACTION = {
-  'p-indecx1': 'MQWL91U1', // Informativo 50% IA + 50% humano
-  'p-indecx2': 'BSV2R4NX', // Técnico 50% IA + 50% humano
-  'p-indecx3': 'CKEPEXUP', // Técnico 100% humano
-  'p-indecx4': 'NKISR8O1', // Informativo 100% humano
-  'p-indecx5': '8OVWL4UE'  // Médico 100% humanizado
+  'p-indecx1': 'MQWL91U1',
+  'p-indecx2': 'BSV2R4NX',
+  'p-indecx3': 'CKEPEXUP',
+  'p-indecx4': 'NKISR8O1',
+  'p-indecx5': '8OVWL4UE'
 };
 
-// Cache do token IndeCX
 let indecxToken = null;
 let tokenExpiry = null;
 
-// Obter token da IndeCX
 async function getIndecxToken() {
   if (indecxToken && tokenExpiry && Date.now() < tokenExpiry) {
     return indecxToken;
   }
 
-  const response = await axios.get(`${INDECX_BASE_URL}/authorization/token`, {
-    headers: { 'Company-Key': INDECX_COMPANY_KEY }
-  });
+  const response = await axios.get(
+    INDECX_BASE_URL + '/authorization/token',
+    { headers: { 'Company-Key': INDECX_COMPANY_KEY } }
+  );
 
   indecxToken = response.data.authToken;
-  tokenExpiry = Date.now() + (25 * 60 * 1000);
+  tokenExpiry = Date.now() + 25 * 60 * 1000;
   return indecxToken;
 }
 
-// Disparar pesquisa na IndeCX
 async function dispararPesquisa(actionId, dados) {
   const token = await getIndecxToken();
   
   const response = await axios.post(
-    `${INDECX_BASE_URL}/send/${actionId}`,
+    INDECX_BASE_URL + '/send/' + actionId,
     dados,
-    {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    }
+    { headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } }
   );
   
   return response.data;
 }
 
-// Handler principal
 module.exports = async (req, res) => {
-  // Health check
   if (req.method === 'GET') {
-    return res.status(200).json({ 
-      status: 'ok', 
-      message: 'Middleware Zendesk-IndeCX funcionando!' 
-    });
+    return res.status(200).json({ status: 'ok', message: 'Middleware Zendesk-IndeCX funcionando!' });
   }
 
-  // Webhook do Zendesk
   if (req.method === 'POST') {
     try {
-      console.log('📨 Webhook recebido:', JSON.stringify(req.body, null, 2));
+      const { ticket_id, cliente_nome, cliente_email, cliente_telefone, tag_pesquisa, brand, codigo_notro, destino_viagem } = req.body;
 
-      const {
-        ticket_id,
-        cliente_nome,
-        cliente_email,
-        cliente_telefone,
-        tag_pesquisa,
-        brand,
-        codigo_notro,
-        destino_viagem
-      } = req.body;
-
-      // Identificar qual ação IndeCX usar
       const actionId = TAG_TO_ACTION[tag_pesquisa];
       
       if (!actionId) {
-        console.log('⚠️ Tag não mapeada:', tag_pesquisa);
-        return res.status(200).json({ 
-          success: false, 
-          error: 'Tag não mapeada' 
-        });
+        return res.status(200).json({ success: false, error: 'Tag não mapeada' });
       }
 
-      // Validar contato
       if (!cliente_email && !cliente_telefone) {
-        console.log('⚠️ Cliente sem email ou telefone');
-        return res.status(200).json({ 
-          success: false, 
-          error: 'Cliente sem contato válido' 
-        });
+        return res.status(200).json({ success: false, error: 'Cliente sem contato válido' });
       }
 
-      // Montar dados para IndeCX
       const dadosIndecx = {
         nome: cliente_nome || 'Cliente',
         email: cliente_email || '',
@@ -111,25 +74,12 @@ module.exports = async (req, res) => {
         destino_viagem: destino_viagem || ''
       };
 
-      console.log('📤 Enviando para IndeCX:', actionId, dadosIndecx);
-
-      // Disparar pesquisa
       const resultado = await dispararPesquisa(actionId, dadosIndecx);
 
-      console.log('✅ Pesquisa disparada:', resultado);
-
-      return res.status(200).json({ 
-        success: true, 
-        actionId: actionId,
-        message: 'Pesquisa disparada com sucesso!' 
-      });
+      return res.status(200).json({ success: true, actionId: actionId, message: 'Pesquisa disparada com sucesso!' });
 
     } catch (error) {
-      console.error('❌ Erro:', error.response?.data || error.message);
-      return res.status(200).json({ 
-        success: false, 
-        error: error.message 
-      });
+      return res.status(200).json({ success: false, error: error.message });
     }
   }
 

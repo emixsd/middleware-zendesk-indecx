@@ -22,10 +22,12 @@ async function getIndecxToken() {
   if (indecxToken && tokenExpiry && Date.now() < tokenExpiry) {
     return indecxToken;
   }
+
   const response = await axios.get(
     INDECX_BASE_URL + '/authorization/token',
     { headers: { 'Company-Key': INDECX_COMPANY_KEY } }
   );
+
   indecxToken = response.data.authToken;
   tokenExpiry = Date.now() + 25 * 60 * 1000;
   return indecxToken;
@@ -46,13 +48,21 @@ async function gerarLinkPesquisa(actionId, dados) {
 async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
 
+  // Mensagem com botão (actions). Também deixei o link no texto como fallback.
   const mensagem = {
     author: { type: 'business' },
     content: {
       type: 'text',
       text:
         'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?\n\n' +
-        'Avaliar experiência: ' + linkPesquisa
+        'Link caso não apareça o botão: ' + linkPesquisa,
+      actions: [
+        {
+          type: 'link',
+          text: 'Avaliar experiência',
+          uri: linkPesquisa
+        }
+      ]
     }
   };
 

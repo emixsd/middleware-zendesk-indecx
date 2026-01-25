@@ -54,8 +54,7 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
     content: {
       type: 'text',
       text:
-        'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?\n\n' +
-        'Link caso não apareça o botão: ' + linkPesquisa,
+        'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?\n\n'
       actions: [
         {
           type: 'link',

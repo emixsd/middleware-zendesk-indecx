@@ -48,22 +48,20 @@ async function gerarLinkPesquisa(actionId, dados) {
 async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
 
-  // Mensagem com botão (actions). Também deixei o link no texto como fallback.
   const mensagem = {
-    author: { type: 'business' },
-    content: {
-      type: 'text',
-      text:
-        'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?\n\n'
-      actions: [
-        {
-          type: 'link',
-          text: 'Avaliar experiência',
-          uri: linkPesquisa
-        }
-      ]
-    }
-  };
+  author: { type: 'business' },
+  content: {
+    type: 'text',
+    text: 'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
+    actions: [
+      {
+        type: 'link',
+        text: 'Avaliar experiência',
+        uri: linkPesquisa
+      }
+    ]
+  }
+};
 
   const url =
     'https://api.smooch.io/v2/apps/' +

@@ -93,7 +93,7 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'POST') {
-    try {
+    try {console.log('DADOS RECEBIDOS:', JSON.stringify(req.body));
       const {
         ticket_id,
         cliente_nome,

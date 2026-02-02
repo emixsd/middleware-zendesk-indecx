@@ -103,7 +103,8 @@ module.exports = async (req, res) => {
         brand,
         codigo_notro,
         destino_viagem,
-        conversation_id
+        conversation_id,
+        analista
       } = req.body;
 
       const actionId = TAG_TO_ACTION[tag_pesquisa];
@@ -121,7 +122,8 @@ module.exports = async (req, res) => {
         TicketID: ticket_id,
         brand: brand || '',
         codigo_notro: codigo_notro || '',
-        destino_viagem: destino_viagem || ''
+        destino_viagem: destino_viagem || '',
+        analista: analista || ''
       };
 
       // só manda email se existir (não manda vazio)

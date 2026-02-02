@@ -1,9 +1,15 @@
 const axios = require('axios');
 
 const INDECX_COMPANY_KEY = process.env.INDECX_COMPANY_KEY;
+
 const SMOOCH_APP_ID = process.env.SMOOCH_APP_ID;
 const SMOOCH_KEY_ID = process.env.SMOOCH_KEY_ID;
 const SMOOCH_SECRET = process.env.SMOOCH_SECRET;
+
+// Zendesk Support API – pra buscar o conversation_id no ticket
+const ZENDESK_SUBDOMAIN = process.env.ZENDESK_SUBDOMAIN; // ex: "heroassist"
+const ZENDESK_EMAIL = process.env.ZENDESK_EMAIL;         // ex: "email@empresa.com"
+const ZENDESK_API_TOKEN = process.env.ZENDESK_API_TOKEN; // token do Zendesk
 
 const INDECX_BASE_URL = 'https://indecx.com/v3/integrations';
 
@@ -19,9 +25,7 @@ let indecxToken = null;
 let tokenExpiry = null;
 
 async function getIndecxToken() {
-  if (indecxToken && tokenExpiry && Date.now() < tokenExpiry) {
-    return indecxToken;
-  }
+  if (indecxToken && tokenExpiry && Date.now() < tokenExpiry) return indecxToken;
 
   const response = await axios.get(
     INDECX_BASE_URL + '/authorization/token',
@@ -42,26 +46,21 @@ async function gerarLinkPesquisa(actionId, dados) {
     { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }
   );
 
-  return response.data.customers[0].shortUrl;
+  return response.data?.customers?.[0]?.shortUrl || null;
 }
 
 async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
 
+  // 
   const mensagem = {
-  author: { type: 'business' },
-  content: {
-    type: 'text',
-    text: 'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
-    actions: [
-      {
-        type: 'link',
-        text: 'Avaliar experiência',
-        uri: linkPesquisa
-      }
-    ]
-  }
-};
+    author: { type: 'business' },
+    content: {
+      type: 'text',
+      text: 'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
+      actions: [{ type: 'link', text: 'Avaliar experiência', uri: linkPesquisa }]
+    }
+  };
 
   const url =
     'https://api.smooch.io/v2/apps/' +
@@ -70,21 +69,46 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
     conversationId +
     '/messages';
 
-  try {
-    const response = await axios.post(url, mensagem, {
-      headers: {
-        Authorization: 'Basic ' + auth,
-        'Content-Type': 'application/json'
-      }
-    });
+  const response = await axios.post(url, mensagem, {
+    headers: { Authorization: 'Basic ' + auth, 'Content-Type': 'application/json' }
+  });
 
-    console.log('SMOOCH OK status:', response.status);
-    return response.data;
-  } catch (err) {
-    console.error('SMOOCH ERRO status:', err.response?.status);
-    console.error('SMOOCH ERRO body:', JSON.stringify(err.response?.data || err.message, null, 2));
-    throw err;
+  return response.data;
+}
+
+// Busca o conversation_id direto do ticket via audits
+async function buscarConversationIdNoTicket(ticketId) {
+  if (!ZENDESK_SUBDOMAIN || !ZENDESK_EMAIL || !ZENDESK_API_TOKEN) {
+    console.log('Zendesk creds ausentes: não dá pra buscar conversation_id via API.');
+    return null;
   }
+
+  const basic = Buffer.from(`${ZENDESK_EMAIL}/token:${ZENDESK_API_TOKEN}`).toString('base64');
+  const url = `https://${ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets/${ticketId}/audits.json`;
+
+  const resp = await axios.get(url, {
+    headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/json' }
+  });
+
+  const audits = resp.data?.audits || [];
+
+  // varre do mais novo pro mais antigo
+  for (let i = audits.length - 1; i >= 0; i--) {
+    const evs = audits[i]?.events || [];
+    for (const ev of evs) {
+      if (ev.type === 'Comment' && ev.body) {
+        // pega "ID da conversa: XXXXX" (pt) ou variações
+        // aceita letras, números, "_" e "-"
+        const m = String(ev.body).match(/ID da conversa:\s*([A-Za-z0-9_-]+)/i);
+        if (m?.[1]) return m[1].trim();
+
+        const m2 = String(ev.body).match(/Conversation ID:\s*([A-Za-z0-9_-]+)/i);
+        if (m2?.[1]) return m2[1].trim();
+      }
+    }
+  }
+
+  return null;
 }
 
 module.exports = async (req, res) => {
@@ -94,6 +118,8 @@ module.exports = async (req, res) => {
 
   if (req.method === 'POST') {
     try {
+      console.log('Webhook recebido:', JSON.stringify(req.body || {}, null, 2));
+
       const {
         ticket_id,
         cliente_nome,
@@ -104,17 +130,25 @@ module.exports = async (req, res) => {
         codigo_notro,
         destino_viagem,
         conversation_id,
-        analista
-      } = req.body;
+        analista // <<< NOVO
+      } = req.body || {};
 
       const actionId = TAG_TO_ACTION[tag_pesquisa];
-
       if (!actionId) {
+        console.log('Retorno cedo: Tag não mapeada:', tag_pesquisa);
         return res.status(200).json({ success: false, error: 'Tag não mapeada' });
       }
 
-      if (!conversation_id) {
-        return res.status(200).json({ success: false, error: 'Conversation ID não informado' });
+      // conversa pode vir vazia do Zendesk → tenta buscar no ticket
+      let convId = String(conversation_id || '').trim();
+      if (!convId && ticket_id) {
+        console.log('conversation_id vazio no payload. Buscando no ticket:', ticket_id);
+        convId = await buscarConversationIdNoTicket(ticket_id);
+      }
+
+      if (!convId) {
+        console.log('Retorno cedo: Conversation ID não encontrado (payload + ticket).');
+        return res.status(200).json({ success: false, error: 'Conversation ID não encontrado' });
       }
 
       const dadosIndecx = {
@@ -122,9 +156,13 @@ module.exports = async (req, res) => {
         TicketID: ticket_id,
         brand: brand || '',
         codigo_notro: codigo_notro || '',
-        destino_viagem: destino_viagem || '',
-        analista: analista || ''
+        destino_viagem: destino_viagem || ''
       };
+
+      // NOVO indicador: analista
+      if ((analista || '').trim()) {
+        dadosIndecx.analista = analista.trim();
+      }
 
       // só manda email se existir (não manda vazio)
       if ((cliente_email || '').trim()) {
@@ -137,13 +175,18 @@ module.exports = async (req, res) => {
       }
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
+      if (!linkPesquisa) {
+        console.log('IndeCX não retornou shortUrl.');
+        return res.status(200).json({ success: false, error: 'Não consegui gerar shortUrl na IndeCX' });
+      }
 
-      await enviarMensagemWhatsApp(conversation_id, linkPesquisa);
+      await enviarMensagemWhatsApp(convId, linkPesquisa);
 
       return res.status(200).json({
         success: true,
-        actionId: actionId,
+        actionId,
         link: linkPesquisa,
+        conversation_id: convId,
         message: 'Mensagem enviada no WhatsApp!'
       });
     } catch (error) {

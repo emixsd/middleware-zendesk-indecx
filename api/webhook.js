@@ -12,7 +12,8 @@ const TAG_TO_ACTION = {
   'p-indecx2': 'BSV2R4NX',
   'p-indecx3': 'CKEPEXUP',
   'p-indecx4': 'NKISR8O1',
-  'p-indecx5': '8OVWL4UE'
+  'p-indecx5': '8OVWL4UE',
+  'p-indecx6': 'ZWM2SC7XV3' 
 };
 
 let indecxToken = null;
@@ -23,10 +24,9 @@ async function getIndecxToken() {
     return indecxToken;
   }
 
-  const response = await axios.get(
-    INDECX_BASE_URL + '/authorization/token',
-    { headers: { 'Company-Key': INDECX_COMPANY_KEY } }
-  );
+  const response = await axios.get(INDECX_BASE_URL + '/authorization/token', {
+    headers: { 'Company-Key': INDECX_COMPANY_KEY }
+  });
 
   indecxToken = response.data.authToken;
   tokenExpiry = Date.now() + 25 * 60 * 1000;
@@ -39,7 +39,12 @@ async function gerarLinkPesquisa(actionId, dados) {
   const response = await axios.post(
     INDECX_BASE_URL + '/actions/' + actionId + '/invites',
     { customers: [dados] },
-    { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }
+    {
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      }
+    }
   );
 
   return response.data.customers[0].shortUrl;
@@ -49,19 +54,20 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
 
   const mensagem = {
-  author: { type: 'business' },
-  content: {
-    type: 'text',
-    text: 'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
-    actions: [
-      {
-        type: 'link',
-        text: 'Avaliar experiência',
-        uri: linkPesquisa
-      }
-    ]
-  }
-};
+    author: { type: 'business' },
+    content: {
+      type: 'text',
+      text:
+        'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
+      actions: [
+        {
+          type: 'link',
+          text: 'Avaliar experiência',
+          uri: linkPesquisa
+        }
+      ]
+    }
+  };
 
   const url =
     'https://api.smooch.io/v2/apps/' +
@@ -89,11 +95,15 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
 
 module.exports = async (req, res) => {
   if (req.method === 'GET') {
-    return res.status(200).json({ status: 'ok', message: 'Middleware Zendesk-IndeCX funcionando!' });
+    return res
+      .status(200)
+      .json({ status: 'ok', message: 'Middleware Zendesk-IndeCX funcionando!' });
   }
 
   if (req.method === 'POST') {
-    try {console.log('DADOS RECEBIDOS:', JSON.stringify(req.body));
+    try {
+      console.log('DADOS RECEBIDOS:', JSON.stringify(req.body));
+
       const {
         ticket_id,
         cliente_nome,
@@ -126,12 +136,12 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
-      // só manda email se existir (não manda vazio)
+      // se existir
       if ((cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();
       }
 
-      // só manda telefone se existir (não manda vazio)
+      // se existir
       if (cliente_telefone) {
         dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
       }

@@ -136,6 +136,11 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
+      // conversation_id só como indicador na pesquisa 6
+      if (tag_pesquisa === 'p-indecx6') {
+        dadosIndecx.conversation_id = conversation_id || '';
+      }
+
       // se existir
       if ((cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();

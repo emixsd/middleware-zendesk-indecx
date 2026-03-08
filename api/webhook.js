@@ -13,7 +13,7 @@ const TAG_TO_ACTION = {
   'p-indecx3': 'CKEPEXUP',
   'p-indecx4': 'NKISR8O1',
   'p-indecx5': '8OVWL4UE',
-  'p-indecx6': 'ZWM2SC7X'
+  'p-indecx6': 'ZWM2SC7X',
   'p-indecx7': 'OEOK5BH9'
 };
 

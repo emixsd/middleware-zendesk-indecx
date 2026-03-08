@@ -14,6 +14,7 @@ const TAG_TO_ACTION = {
   'p-indecx4': 'NKISR8O1',
   'p-indecx5': '8OVWL4UE',
   'p-indecx6': 'ZWM2SC7X'
+  'p-indecx7': 'OEOK5BH9'
 };
 
 let indecxToken = null;
@@ -136,10 +137,10 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
-      // conversation_id só como indicador na pesquisa 6
-      if (tag_pesquisa === 'p-indecx6') {
+      // conversation_id  pesquisas julie
+      if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {
         dadosIndecx.conversation_id = conversation_id || '';
-      }
+}
 
       // se existir
       if ((cliente_email || '').trim()) {

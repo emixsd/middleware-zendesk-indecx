@@ -59,7 +59,7 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
     content: {
       type: 'text',
       text:
-        'Olá!\n\nVimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
+        'Vimos que você recebeu um atendimento recentemente. Pode avaliar sua experiência?',
       actions: [
         {
           type: 'link',

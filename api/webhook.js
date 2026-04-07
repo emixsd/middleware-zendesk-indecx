@@ -14,7 +14,9 @@ const TAG_TO_ACTION = {
   'p-indecx4': 'NKISR8O1',
   'p-indecx5': '8OVWL4UE',
   'p-indecx6': 'ZWM2SC7X',
-  'p-indecx7': 'OEOK5BH9'
+  'p-indecx7': 'OEOK5BH9',
+  'p-indecx8': 'BLA4FABO',
+  'p-indecx9': 'UFAGAEZI'
 };
 
 let indecxToken = null;

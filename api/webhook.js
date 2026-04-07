@@ -54,9 +54,6 @@ async function gerarLinkPesquisa(actionId, dados) {
     }
   );
 
-  // Log temporário para debugar retorno do IndeCX
-  console.log('INDECX RESPOSTA:', JSON.stringify(response.data));
-
   return response.data.customers[0].shortUrl;
 }
 
@@ -165,11 +162,19 @@ module.exports = async (req, res) => {
         dadosIndecx.conversation_id = conversation_id || '';
       }
 
+      // Email e telefone enviados ao IndeCX (necessário para gerar o shortUrl)
+      // mas não aparecem nos logs acima
+      if ((cliente_email || '').trim()) {
+        dadosIndecx.email = cliente_email.trim();
+      }
+      if (cliente_telefone) {
+        dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
+      }
+
       const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
 
-      // Valida se o IndeCX retornou o link corretamente
       if (!linkPesquisa) {
         console.error('INDECX não retornou shortUrl para actionId:', actionId);
         return res.status(500).json({ success: false, error: 'Link de pesquisa não gerado pelo IndeCX' });

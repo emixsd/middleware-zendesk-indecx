@@ -17,8 +17,8 @@ const TAG_TO_ACTION = {
   'p-indecx7': 'OEOK5BH9',
   'p-indecx8': 'BLA4FABO',
   'p-indecx9': 'UFAGAEZI',
-  'p-indecx8-es': 'BLA4FABO', // Boletín Informativo 100% Humano LATAM
-  'p-indecx9-es': 'UFAGAEZI'  // Atención Médico 100% Humano
+  'p-indecx8-es': 'BLA4FABO',
+  'p-indecx9-es': 'UFAGAEZI'
 };
 
 const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es']);
@@ -53,6 +53,9 @@ async function gerarLinkPesquisa(actionId, dados) {
       }
     }
   );
+
+  // Log temporário para debugar retorno do IndeCX
+  console.log('INDECX RESPOSTA:', JSON.stringify(response.data));
 
   return response.data.customers[0].shortUrl;
 }
@@ -148,7 +151,6 @@ module.exports = async (req, res) => {
         return res.status(200).json({ success: false, error: 'Conversation ID não informado' });
       }
 
-      // Email e telefone removidos — envio sempre via Smooch, IndeCX não precisa
       const dadosIndecx = {
         nome: cliente_nome || 'Cliente',
         TicketID: ticket_id,
@@ -166,6 +168,12 @@ module.exports = async (req, res) => {
       const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
+
+      // Valida se o IndeCX retornou o link corretamente
+      if (!linkPesquisa) {
+        console.error('INDECX não retornou shortUrl para actionId:', actionId);
+        return res.status(500).json({ success: false, error: 'Link de pesquisa não gerado pelo IndeCX' });
+      }
 
       await enviarMensagemWhatsApp(conversation_id, linkPesquisa, isSpanish);
 

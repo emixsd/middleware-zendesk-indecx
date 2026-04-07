@@ -114,6 +114,8 @@ module.exports = async (req, res) => {
 
   if (req.method === 'POST') {
     try {
+      console.log('DADOS RECEBIDOS:', JSON.stringify(req.body));
+
       const {
         ticket_id,
         cliente_nome,
@@ -126,17 +128,6 @@ module.exports = async (req, res) => {
         conversation_id,
         analista
       } = req.body;
-
-      // Log com dados pessoais mascarados (LGPD)
-      console.log('DADOS RECEBIDOS:', JSON.stringify({
-        ticket_id,
-        tag_pesquisa,
-        brand,
-        conversation_id,
-        cliente_nome: cliente_nome ? cliente_nome[0] + '***' : null,
-        cliente_email: cliente_email ? cliente_email.replace(/(.{2}).+(@.+)/, '$1***$2') : null,
-        cliente_telefone: cliente_telefone ? String(cliente_telefone).slice(0, -4).replace(/./g, '*') + String(cliente_telefone).slice(-4) : null
-      }));
 
       const actionId = TAG_TO_ACTION[tag_pesquisa];
 
@@ -157,16 +148,14 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
-      // conversation_id apenas para pesquisas Julie
       if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {
         dadosIndecx.conversation_id = conversation_id || '';
       }
 
-      // Email e telefone enviados ao IndeCX (necessário para gerar o shortUrl)
-      // mas não aparecem nos logs acima
       if ((cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();
       }
+
       if (cliente_telefone) {
         dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
       }
@@ -174,11 +163,6 @@ module.exports = async (req, res) => {
       const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
-
-      if (!linkPesquisa) {
-        console.error('INDECX não retornou shortUrl para actionId:', actionId);
-        return res.status(500).json({ success: false, error: 'Link de pesquisa não gerado pelo IndeCX' });
-      }
 
       await enviarMensagemWhatsApp(conversation_id, linkPesquisa, isSpanish);
 

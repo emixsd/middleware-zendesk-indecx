@@ -16,8 +16,12 @@ const TAG_TO_ACTION = {
   'p-indecx6': 'ZWM2SC7X',
   'p-indecx7': 'OEOK5BH9',
   'p-indecx8': 'BLA4FABO',
-  'p-indecx9': 'UFAGAEZI'
+  'p-indecx9': 'UFAGAEZI',
+  'p-indecx8-es': 'BLA4FABO', // Boletín Informativo 100% Humano LATAM
+  'p-indecx9-es': 'UFAGAEZI'  // Atención Médico 100% Humano
 };
+
+const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es']);
 
 let indecxToken = null;
 let tokenExpiry = null;
@@ -53,19 +57,24 @@ async function gerarLinkPesquisa(actionId, dados) {
   return response.data.customers[0].shortUrl;
 }
 
-async function enviarMensagemWhatsApp(conversationId, linkPesquisa) {
+async function enviarMensagemWhatsApp(conversationId, linkPesquisa, isSpanish = false) {
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
+
+  const textoMensagem = isSpanish
+    ? '¿Pudimos ayudarte hoy? 💬\nTu opinión tarda menos de 30 segundos y es muy importante para nosotros. Tu respuesta llega directamente al equipo responsable de tu atención.'
+    : 'Me conta, conseguimos te ajudar hoje? 💬\nSua avaliação leva menos de 30 segundos e é muito importante para nós. Sua resposta vai direto para o time responsável pelo atendimento.';
+
+  const textoBotao = isSpanish ? 'Evaluar experiencia' : 'Avaliar experiência';
 
   const mensagem = {
     author: { type: 'business' },
     content: {
       type: 'text',
-      text:
-        'Me conta, conseguimos te ajudar hoje? 💬\nSua avaliação leva menos de 30 segundos e é muito importante para nós. Sua resposta vai direto para o time responsável pelo atendimento.',
+      text: textoMensagem,
       actions: [
         {
           type: 'link',
-          text: 'Avaliar experiência',
+          text: textoBotao,
           uri: linkPesquisa
         }
       ]
@@ -105,8 +114,6 @@ module.exports = async (req, res) => {
 
   if (req.method === 'POST') {
     try {
-      console.log('DADOS RECEBIDOS:', JSON.stringify(req.body));
-
       const {
         ticket_id,
         cliente_nome,
@@ -120,6 +127,17 @@ module.exports = async (req, res) => {
         analista
       } = req.body;
 
+      // Log com dados pessoais mascarados (LGPD)
+      console.log('DADOS RECEBIDOS:', JSON.stringify({
+        ticket_id,
+        tag_pesquisa,
+        brand,
+        conversation_id,
+        cliente_nome: cliente_nome ? cliente_nome[0] + '***' : null,
+        cliente_email: cliente_email ? cliente_email.replace(/(.{2}).+(@.+)/, '$1***$2') : null,
+        cliente_telefone: cliente_telefone ? String(cliente_telefone).slice(0, -4).replace(/./g, '*') + String(cliente_telefone).slice(-4) : null
+      }));
+
       const actionId = TAG_TO_ACTION[tag_pesquisa];
 
       if (!actionId) {
@@ -130,6 +148,7 @@ module.exports = async (req, res) => {
         return res.status(200).json({ success: false, error: 'Conversation ID não informado' });
       }
 
+      // Email e telefone removidos — envio sempre via Smooch, IndeCX não precisa
       const dadosIndecx = {
         nome: cliente_nome || 'Cliente',
         TicketID: ticket_id,
@@ -139,24 +158,16 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
-      // conversation_id  pesquisas julie
+      // conversation_id apenas para pesquisas Julie
       if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {
         dadosIndecx.conversation_id = conversation_id || '';
-}
-
-      // se existir
-      if ((cliente_email || '').trim()) {
-        dadosIndecx.email = cliente_email.trim();
       }
 
-      // se existir
-      if (cliente_telefone) {
-        dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
-      }
+      const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
 
-      await enviarMensagemWhatsApp(conversation_id, linkPesquisa);
+      await enviarMensagemWhatsApp(conversation_id, linkPesquisa, isSpanish);
 
       return res.status(200).json({
         success: true,

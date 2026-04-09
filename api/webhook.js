@@ -18,10 +18,11 @@ const TAG_TO_ACTION = {
   'p-indecx8': 'BLA4FABO',
   'p-indecx9': 'UFAGAEZI',
   'p-indecx8-es': 'BLA4FABO',
-  'p-indecx9-es': 'UFAGAEZI'
+  'p-indecx9-es': 'UFAGAEZI',
+  'p-indecx10-es': 'IDI64Z1ZV3'
 };
 
-const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es']);
+const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es', 'p-indecx10-es']);
 
 let indecxToken = null;
 let tokenExpiry = null;

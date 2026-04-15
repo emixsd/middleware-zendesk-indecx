@@ -62,8 +62,8 @@ async function enviarMensagemWhatsApp(conversationId, linkPesquisa, isSpanish = 
   const auth = Buffer.from(SMOOCH_KEY_ID + ':' + SMOOCH_SECRET).toString('base64');
 
   const textoMensagem = isSpanish
-    ? '¿Pudimos ayudarte hoy? 💬\nTu opinión tarda menos de 30 segundos y es muy importante para nosotros. Tu respuesta llega directamente al equipo responsable de tu atención.'
-    : 'Me conta, conseguimos te ajudar hoje? 💬\nSua avaliação leva menos de 30 segundos e é muito importante para nós. Sua resposta vai direto para o time responsável pelo atendimento.';
+    ? '¿Pudimos ayudarte hoy? 💬\nTe va a llevar menos de 30 segundos responder y tu opinión es muy importante para nosotros. \nTu respuesta llega directamente al equipo responsable de tu atención.😉'
+    : 'Me conta, conseguimos te ajudar hoje? 💬\nSua avaliação leva menos de 30 segundos e é muito importante para nós. \nSua resposta vai direto para o time responsável pelo atendimento.😉';
 
   const textoBotao = isSpanish ? 'Evaluar experiencia' : 'Avaliar experiência';
 

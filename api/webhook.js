@@ -102,29 +102,6 @@ function getZendeskBaseUrl() {
   return 'https://' + subdomain + '.zendesk.com/api/v2';
 }
 
-async function buscarAgenteDoTicketZendesk(ticketId) {
-  const headers = {
-    Authorization: getZendeskAuthHeader(),
-    'Content-Type': 'application/json'
-  };
-  const ticketUrl = getZendeskBaseUrl() + '/tickets/' + ticketId + '.json';
-  const ticketResponse = await axios.get(ticketUrl, { headers });
-  const assigneeId = ticketResponse.data?.ticket?.assignee_id;
-
-  if (!assigneeId) {
-    return {};
-  }
-
-  const userUrl = getZendeskBaseUrl() + '/users/' + assigneeId + '.json';
-  const userResponse = await axios.get(userUrl, { headers });
-  const user = userResponse.data?.user || {};
-
-  return {
-    email: user.email || '',
-    name: user.name || ''
-  };
-}
-
 function montarObservacaoInterna(linkPesquisa, dados, isSpanish = false) {
   if (isSpanish) {
     return [
@@ -253,12 +230,8 @@ module.exports = async (req, res) => {
         codigo_notro,
         destino_viagem,
         conversation_id,
-        analista,
-        analista_email,
-        agente_email
+        analista
       } = req.body;
-      let emailAgente = agente_email || analista_email;
-      let nomeAnalista = analista;
 
       const enviarComoObservacaoInterna = isInternalNoteDelivery(tag_pesquisa);
       const actionId = TAG_TO_ACTION[tag_pesquisa];
@@ -275,25 +248,15 @@ module.exports = async (req, res) => {
         return res.status(200).json({ success: false, error: 'Ticket ID nao informado' });
       }
 
-      if (enviarComoObservacaoInterna && !(emailAgente || '').trim()) {
-        const agenteZendesk = await buscarAgenteDoTicketZendesk(ticket_id);
-        emailAgente = agenteZendesk.email || emailAgente;
-        nomeAnalista = nomeAnalista || agenteZendesk.name || '';
-      }
-
-      if (enviarComoObservacaoInterna && !(emailAgente || '').trim()) {
-        return res.status(200).json({ success: false, error: 'Agente email nao informado' });
-      }
-
       const dadosIndecx = {
         nome: enviarComoObservacaoInterna
-          ? nomeAnalista || cliente_nome || 'Agente'
+          ? analista || cliente_nome || 'Agente'
           : cliente_nome || 'Cliente',
         TicketID: ticket_id,
         brand: brand || '',
         codigo_notro: codigo_notro || '',
         destino_viagem: destino_viagem || '',
-        analista: nomeAnalista || ''
+        analista: analista || ''
       };
 
       if (enviarComoObservacaoInterna) {
@@ -305,11 +268,7 @@ module.exports = async (req, res) => {
         dadosIndecx.conversation_id = conversation_id || '';
       }
 
-      if (enviarComoObservacaoInterna) {
-        if ((emailAgente || '').trim()) {
-          dadosIndecx.email = emailAgente.trim();
-        }
-      } else if ((cliente_email || '').trim()) {
+      if (!enviarComoObservacaoInterna && (cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();
       }
 

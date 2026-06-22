@@ -4,6 +4,10 @@ const INDECX_COMPANY_KEY = process.env.INDECX_COMPANY_KEY;
 const SMOOCH_APP_ID = process.env.SMOOCH_APP_ID;
 const SMOOCH_KEY_ID = process.env.SMOOCH_KEY_ID;
 const SMOOCH_SECRET = process.env.SMOOCH_SECRET;
+const ZENDESK_SUBDOMAIN = process.env.ZENDESK_SUBDOMAIN;
+const ZENDESK_EMAIL = process.env.ZENDESK_EMAIL;
+const ZENDESK_API_TOKEN = process.env.ZENDESK_API_TOKEN;
+const INDECX_INTERNAL_EMAIL_TAG = 'p-indecx11-m';
 
 const INDECX_BASE_URL = 'https://indecx.com/v3/integrations';
 
@@ -19,7 +23,8 @@ const TAG_TO_ACTION = {
   'p-indecx9': 'UFAGAEZI',
   'p-indecx8-es': 'BLA4FABO',
   'p-indecx9-es': 'UFAGAEZI',
-  'p-indecx10-es': 'IDI64Z1Z'
+  'p-indecx10-es': 'IDI64Z1Z',
+  'p-indecx11-m': 'VLJ5LZKU'
 };
 
 const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es', 'p-indecx10-es']);
@@ -56,6 +61,96 @@ async function gerarLinkPesquisa(actionId, dados) {
   );
 
   return response.data.customers[0].shortUrl;
+}
+
+function isInternalNoteDelivery(tagPesquisa) {
+  return tagPesquisa === INDECX_INTERNAL_EMAIL_TAG;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getZendeskAuthHeader() {
+  if (!ZENDESK_EMAIL || !ZENDESK_API_TOKEN) {
+    throw new Error('Credenciais Zendesk nao configuradas');
+  }
+
+  const auth = Buffer.from(ZENDESK_EMAIL + '/token:' + ZENDESK_API_TOKEN).toString('base64');
+  return 'Basic ' + auth;
+}
+
+function getZendeskBaseUrl() {
+  if (!ZENDESK_SUBDOMAIN) {
+    throw new Error('Subdominio Zendesk nao configurado');
+  }
+
+  const subdomain = ZENDESK_SUBDOMAIN.replace(/^https?:\/\//, '').replace(/\.zendesk\.com\/?$/, '');
+  return 'https://' + subdomain + '.zendesk.com/api/v2';
+}
+
+function montarObservacaoInterna(linkPesquisa, dados, isSpanish = false) {
+  if (isSpanish) {
+    return [
+      '<p><strong>Avalie o prestador?</strong></p>',
+      '<p><a href="' +
+        escapeHtml(linkPesquisa) +
+        '">' +
+        'Responder pesquisa' +
+        '</a></p>',
+      '<p>Ticket: ' + escapeHtml(dados.TicketID) + '</p>'
+    ].join('');
+  }
+
+  return [
+    '<p><strong>Avalie o prestador?</strong></p>',
+    '<p><a href="' +
+      escapeHtml(linkPesquisa) +
+      '">' +
+      'Responder pesquisa' +
+      '</a></p>',
+    '<p>Ticket: ' + escapeHtml(dados.TicketID) + '</p>'
+  ].join('');
+}
+
+async function enviarObservacaoInternaZendesk(ticketId, linkPesquisa, dados, isSpanish = false) {
+  if (!ticketId) {
+    throw new Error('Ticket ID nao informado');
+  }
+
+  const url = getZendeskBaseUrl() + '/tickets/' + ticketId + '.json';
+  const payload = {
+    ticket: {
+      comment: {
+        html_body: montarObservacaoInterna(linkPesquisa, dados, isSpanish),
+        public: false
+      }
+    }
+  };
+
+  try {
+    const response = await axios.put(url, payload, {
+      headers: {
+        Authorization: getZendeskAuthHeader(),
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('ZENDESK NOTA INTERNA OK status:', response.status);
+    return response.data;
+  } catch (err) {
+    console.error('ZENDESK NOTA INTERNA ERRO status:', err.response?.status);
+    console.error(
+      'ZENDESK NOTA INTERNA ERRO body:',
+      JSON.stringify(err.response?.data || err.message, null, 2)
+    );
+    throw err;
+  }
 }
 
 async function enviarMensagemWhatsApp(conversationId, linkPesquisa, isSpanish = false) {
@@ -127,21 +222,31 @@ module.exports = async (req, res) => {
         codigo_notro,
         destino_viagem,
         conversation_id,
-        analista
+        analista,
+        analista_email,
+        agente_email
       } = req.body;
+      const emailAgente = agente_email || analista_email;
 
+      const enviarComoObservacaoInterna = isInternalNoteDelivery(tag_pesquisa);
       const actionId = TAG_TO_ACTION[tag_pesquisa];
 
       if (!actionId) {
         return res.status(200).json({ success: false, error: 'Tag não mapeada' });
       }
 
-      if (!conversation_id) {
+      if (!enviarComoObservacaoInterna && !conversation_id) {
         return res.status(200).json({ success: false, error: 'Conversation ID não informado' });
       }
 
+      if (enviarComoObservacaoInterna && !ticket_id) {
+        return res.status(200).json({ success: false, error: 'Ticket ID nao informado' });
+      }
+
       const dadosIndecx = {
-        nome: cliente_nome || 'Cliente',
+        nome: enviarComoObservacaoInterna
+          ? analista || cliente_nome || 'Agente'
+          : cliente_nome || 'Cliente',
         TicketID: ticket_id,
         brand: brand || '',
         codigo_notro: codigo_notro || '',
@@ -149,11 +254,20 @@ module.exports = async (req, res) => {
         analista: analista || ''
       };
 
+      if (enviarComoObservacaoInterna) {
+        dadosIndecx.cliente_nome = cliente_nome || '';
+        dadosIndecx.canal = 'email';
+      }
+
       if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {
         dadosIndecx.conversation_id = conversation_id || '';
       }
 
-      if ((cliente_email || '').trim()) {
+      if (enviarComoObservacaoInterna) {
+        if ((emailAgente || '').trim()) {
+          dadosIndecx.email = emailAgente.trim();
+        }
+      } else if ((cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();
       }
 
@@ -164,6 +278,17 @@ module.exports = async (req, res) => {
       const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
 
       const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
+
+      if (enviarComoObservacaoInterna) {
+        await enviarObservacaoInternaZendesk(ticket_id, linkPesquisa, dadosIndecx, isSpanish);
+
+        return res.status(200).json({
+          success: true,
+          actionId: actionId,
+          link: linkPesquisa,
+          message: 'Pesquisa enviada como observacao interna no ticket!'
+        });
+      }
 
       await enviarMensagemWhatsApp(conversation_id, linkPesquisa, isSpanish);
 

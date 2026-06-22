@@ -10,23 +10,23 @@ envia a pesquisa pelo canal correto.
 As tags abaixo geram um link da IndeCX e enviam a pesquisa pelo WhatsApp/Smooch.
 Nesse fluxo, `conversation_id` e obrigatorio.
 
-- `p-indecx1`: `MQWL91U1`
-- `p-indecx2`: `BSV2R4NX`
-- `p-indecx3`: `CKEPEXUP`
-- `p-indecx4`: `NKISR8O1`
-- `p-indecx5`: `8OVWL4UE`
-- `p-indecx6`: `ZWM2SC7X`
-- `p-indecx7`: `OEOK5BH9`
-- `p-indecx8`: `BLA4FABO`
-- `p-indecx9`: `UFAGAEZI`
-- `p-indecx8-es`: `BLA4FABO`
-- `p-indecx9-es`: `UFAGAEZI`
-- `p-indecx10-es`: `IDI64Z1Z`
+- `p-indecx1`
+- `p-indecx2`
+- `p-indecx3`
+- `p-indecx4`
+- `p-indecx5`
+- `p-indecx6`
+- `p-indecx7`
+- `p-indecx8`
+- `p-indecx9`
+- `p-indecx8-es`
+- `p-indecx9-es`
+- `p-indecx10-es`
 
 ## Excecao: email com observacao interna
 
-Somente a tag `p-indecx11-m` usa a action `VLJ5LZKU` e publica o link como
-observacao interna no ticket Zendesk. O solicitante nao recebe essa mensagem.
+Somente a tag `p-indecx11-m` publica o link como observacao interna no ticket
+Zendesk. O solicitante nao recebe essa mensagem.
 
 Nesse fluxo, `conversation_id` nao e obrigatorio. O email do solicitante tambem
 nao e usado; se enviado, `agente_email` e o unico email repassado para a IndeCX.

@@ -230,7 +230,8 @@ module.exports = async (req, res) => {
         codigo_notro,
         destino_viagem,
         conversation_id,
-        analista
+        analista,
+        presatdor_email
       } = req.body;
 
       const enviarComoObservacaoInterna = isInternalNoteDelivery(tag_pesquisa);
@@ -262,6 +263,7 @@ module.exports = async (req, res) => {
       if (enviarComoObservacaoInterna) {
         dadosIndecx.cliente_nome = cliente_nome || '';
         dadosIndecx.canal = 'email';
+        dadosIndecx.presatdor_email = presatdor_email || '';
       }
 
       if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {

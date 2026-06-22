@@ -28,8 +28,9 @@ Nesse fluxo, `conversation_id` e obrigatorio.
 Somente a tag `p-indecx11-m` publica o link como observacao interna no ticket
 Zendesk. O solicitante nao recebe essa mensagem.
 
-Nesse fluxo, `conversation_id` nao e obrigatorio. Nenhum email e repassado para
-a IndeCX; o middleware usa os dados do ticket e o nome do analista.
+Nesse fluxo, `conversation_id` nao e obrigatorio. O campo padrao `email` da
+IndeCX nao e preenchido; o middleware usa os dados do ticket e o nome do
+analista.
 
 Texto da observacao interna:
 

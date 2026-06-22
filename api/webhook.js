@@ -250,6 +250,17 @@ module.exports = async (req, res) => {
         return res.status(200).json({ success: false, error: 'Ticket ID nao informado' });
       }
 
+      if (
+        enviarComoObservacaoInterna &&
+        !(cliente_email || '').trim() &&
+        !String(cliente_telefone || '').replace(/\D/g, '')
+      ) {
+        return res.status(200).json({
+          success: false,
+          error: 'Cliente email ou telefone nao informado'
+        });
+      }
+
       const dadosIndecx = {
         nome: enviarComoObservacaoInterna
           ? analista || prestador || cliente_nome || 'Agente'
@@ -271,7 +282,7 @@ module.exports = async (req, res) => {
         dadosIndecx.conversation_id = conversation_id || '';
       }
 
-      if (!enviarComoObservacaoInterna && (cliente_email || '').trim()) {
+      if ((cliente_email || '').trim()) {
         dadosIndecx.email = cliente_email.trim();
       }
 

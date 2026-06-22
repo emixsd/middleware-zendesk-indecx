@@ -105,24 +105,22 @@ function getZendeskBaseUrl() {
 function montarObservacaoInterna(linkPesquisa, dados, isSpanish = false) {
   if (isSpanish) {
     return [
-      '<p><strong>Avalie o prestador?</strong></p>',
+      '<p style="font-size: 18px;"><strong>Avalie a atuacao do prestador nesse caso</strong></p>',
       '<p><a href="' +
         escapeHtml(linkPesquisa) +
         '">' +
         'Responder pesquisa' +
-        '</a></p>',
-      '<p>Ticket: ' + escapeHtml(dados.TicketID) + '</p>'
+        '</a></p>'
     ].join('');
   }
 
   return [
-    '<p><strong>Avalie o prestador?</strong></p>',
+    '<p style="font-size: 18px;"><strong>Avalie a atuacao do prestador nesse caso</strong></p>',
     '<p><a href="' +
       escapeHtml(linkPesquisa) +
       '">' +
       'Responder pesquisa' +
-      '</a></p>',
-    '<p>Ticket: ' + escapeHtml(dados.TicketID) + '</p>'
+      '</a></p>'
   ].join('');
 }
 

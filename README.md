@@ -29,8 +29,8 @@ Somente a tag `p-indecx11-m` publica o link como observacao interna no ticket
 Zendesk. O solicitante nao recebe essa mensagem.
 
 Nesse fluxo, `conversation_id` nao e obrigatorio. O email do solicitante tambem
-nao e usado; se enviado, `agente_email` e o unico email repassado para a IndeCX.
-`analista_email` ainda e aceito como compatibilidade.
+nao e usado. O campo `agente_email` e obrigatorio e e o unico email repassado
+para a IndeCX. `analista_email` ainda e aceito como compatibilidade.
 
 Texto da observacao interna:
 

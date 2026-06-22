@@ -60,7 +60,15 @@ async function gerarLinkPesquisa(actionId, dados) {
     }
   );
 
-  return response.data.customers[0].shortUrl;
+  const customer = response.data?.customers?.[0] || {};
+  const linkPesquisa = customer.shortUrl || customer.url || customer.inviteUrl || customer.link;
+
+  if (!/^https?:\/\//.test(String(linkPesquisa || ''))) {
+    console.error('INDECX RESPOSTA SEM LINK:', JSON.stringify(response.data, null, 2));
+    throw new Error('IndeCX nao retornou um link de pesquisa valido');
+  }
+
+  return linkPesquisa;
 }
 
 function isInternalNoteDelivery(tagPesquisa) {
@@ -241,6 +249,10 @@ module.exports = async (req, res) => {
 
       if (enviarComoObservacaoInterna && !ticket_id) {
         return res.status(200).json({ success: false, error: 'Ticket ID nao informado' });
+      }
+
+      if (enviarComoObservacaoInterna && !(emailAgente || '').trim()) {
+        return res.status(200).json({ success: false, error: 'Agente email nao informado' });
       }
 
       const dadosIndecx = {

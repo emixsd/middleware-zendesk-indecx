@@ -1,57 +1,84 @@
 # middleware-zendesk-indecx
 
-Integracao Zendesk com IndeCX.
+Integracao Zendesk com IndeCX. Recebe webhooks do Zendesk, cria o link da
+pesquisa na IndeCX e entrega pelo canal correto.
 
-Este middleware recebe webhooks do Zendesk, cria o link da pesquisa na IndeCX e
-envia a pesquisa pelo canal correto.
+Este repo unifica os dois middlewares que antes eram separados (WhatsApp/nota e
+email). A logica comum (autenticacao, token IndeCX, chamadas Zendesk, logs) fica
+em [`lib/`](lib/); cada canal e um endpoint fino em [`api/`](api/).
 
-## Fluxo padrao: WhatsApp
+## Endpoints
 
-As tags abaixo geram um link da IndeCX e enviam a pesquisa pelo WhatsApp/Smooch.
-Nesse fluxo, `conversation_id` e obrigatorio.
+| Endpoint | Canal | Arquivo |
+|----------|-------|---------|
+| `POST /api/webhook` | WhatsApp (Smooch) ou nota interna no ticket | [api/webhook.js](api/webhook.js) |
+| `POST /api/email`   | Comentario publico no ticket (Zendesk dispara o email) | [api/email.js](api/email.js) |
 
-- `p-indecx1`
-- `p-indecx2`
-- `p-indecx3`
-- `p-indecx4`
-- `p-indecx5`
-- `p-indecx6`
-- `p-indecx7`
-- `p-indecx8`
-- `p-indecx9`
-- `p-indecx8-es`
-- `p-indecx9-es`
-- `p-indecx10-es`
+`GET` em qualquer um responde um health-check.
 
-## Excecao: email com observacao interna
+### `/api/webhook` — WhatsApp / nota interna
 
-Somente a tag `p-indecx11-m` publica o link como observacao interna no ticket
-Zendesk. O solicitante nao recebe essa mensagem.
+Tags que geram link e enviam por **WhatsApp/Smooch** (`conversation_id`
+obrigatorio): `p-indecx1` .. `p-indecx7`, `p-indecx8-es`, `p-indecx9-es`,
+`p-indecx10-es`.
 
-Nesse fluxo, `conversation_id` nao e obrigatorio. Envie `cliente_email` para a
-IndeCX conseguir gerar o link da pesquisa. O link e publicado no Zendesk como
-observacao interna.
-
+A tag `p-indecx11-m` publica o link como **observacao interna** no ticket
+(`conversation_id` nao e obrigatorio; envie `cliente_email` ou `cliente_telefone`).
 Texto da observacao interna:
 
 ```txt
-Avalie o prestador?
+Avalie a atuacao do prestador nesse caso
 ```
+
+### `/api/email` — comentario publico
+
+Tag `pesquisa-reembolso` gera o link e adiciona um comentario **publico** no
+ticket. O corpo do email varia por `tipo_mensagem` (`p-reem-ap` ou `p-reem-neg`).
+`ticket_id` obrigatorio.
+
+## Seguranca
+
+- `WEBHOOK_SECRET`: se definida, toda requisicao POST (nos dois endpoints)
+  precisa enviar o header `X-Webhook-Secret` com esse mesmo valor; caso
+  contrario recebe `401`. Enquanto nao estiver definida, a autenticacao fica
+  desativada (modo legado) e os endpoints aceitam qualquer POST, apenas
+  registrando um aviso no log. Configure a env e o header no webhook do Zendesk
+  para ativar a protecao sem downtime.
 
 ## Variaveis de ambiente
 
-IndeCX:
+Compartilhadas (IndeCX + Zendesk):
 
 - `INDECX_COMPANY_KEY`
+- `ZENDESK_SUBDOMAIN`: subdominio da conta Zendesk, com ou sem `.zendesk.com`.
 
-WhatsApp/Smooch:
+Autenticacao Zendesk — use **uma** das duas opcoes:
+
+- **OAuth (recomendado)** — client credentials. Tem prioridade se definido:
+  - `ZENDESK_OAUTH_CLIENT_ID`
+  - `ZENDESK_OAUTH_CLIENT_SECRET`
+  - `ZENDESK_OAUTH_SCOPE` (opcional, padrao `tickets:read tickets:write`)
+- **API token (legado, sera desativado pela Zendesk)** — usado se OAuth nao estiver definido:
+  - `ZENDESK_EMAIL`
+  - `ZENDESK_API_TOKEN`
+
+Somente `/api/webhook` (WhatsApp/Smooch):
 
 - `SMOOCH_APP_ID`
 - `SMOOCH_KEY_ID`
 - `SMOOCH_SECRET`
 
-Zendesk, necessario para `p-indecx11-m`:
+Opcionais:
 
-- `ZENDESK_SUBDOMAIN`: subdominio da conta Zendesk, com ou sem `.zendesk.com`.
-- `ZENDESK_EMAIL`: email do usuario de API do Zendesk.
-- `ZENDESK_API_TOKEN`: token de API do Zendesk.
+- `WEBHOOK_SECRET` (ver secao Seguranca).
+- `HTTP_TIMEOUT_MS`: timeout das chamadas externas em ms (padrao `10000`).
+
+## Migracao dos webhooks (repos antigos -> unificado)
+
+Como agora e um unico deploy, os dois endpoints ficam no mesmo dominio. Ao migrar,
+aponte cada webhook do Zendesk para o novo caminho:
+
+- Fluxo WhatsApp/nota -> `https://<deploy>/api/webhook`
+- Fluxo email (antigo repo RECX) -> `https://<deploy>/api/email`
+
+Depois do cutover, o repo `RECX` pode ser arquivado.

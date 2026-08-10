@@ -10,6 +10,7 @@ const {
   isValidConversationId,
   escapeHtml
 } = require('../lib/request');
+const { atribuirSePreenchido, extrairCamposExtras } = require('../lib/payload');
 
 const INDECX_INTERNAL_EMAIL_TAG = 'p-indecx11-m';
 
@@ -28,6 +29,22 @@ const TAG_TO_ACTION = {
 };
 
 const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es', 'p-indecx10-es']);
+
+// Campos extras repassados ao IndeCX no fluxo WhatsApp.
+//   chave = nome do indicador no IndeCX (crie com exatamente este nome)
+//   valor = chave esperada no body do trigger do Zendesk
+//
+// Vazio ou ausente nao e enviado. Nao ha filtro por tag aqui de proposito: o
+// gate e o trigger do Zendesk, que so manda o campo nas pesquisas que o usam
+// (hoje p-indecx5 e p-indecx9-es). Incluir mais uma tag = editar o trigger e
+// criar o indicador na action, sem deploy.
+//
+// Para adicionar um campo: 1 linha aqui + indicador no IndeCX + placeholder no
+// trigger. Se o campo novo for PII, incluir tambem em safeLogBody (../lib/log).
+const CAMPOS_EXTRAS_WHATSAPP = {
+  // ticket field 54270594834195 — lista suspensa "prestador de telemed"
+  prestador_telemed: 'prestador_telemed'
+};
 
 function montarObservacaoInterna(linkPesquisa) {
   return [
@@ -84,34 +101,44 @@ async function handle(body, req, res) {
     }
   }
 
+  // `nome` e o unico campo sempre presente; todo o resto entra por
+  // atribuirSePreenchido, que omite vazio em vez de mandar "" ao IndeCX.
   const dadosIndecx = {
     nome: enviarComoObservacaoInterna
       ? analista || prestador || cliente_nome || 'Agente'
-      : cliente_nome || 'Cliente',
-    TicketID: ticket_id,
-    brand: brand || '',
-    codigo_notro: codigo_notro || '',
-    destino_viagem: destino_viagem || '',
-    analista: analista || ''
+      : cliente_nome || 'Cliente'
   };
 
+  atribuirSePreenchido(dadosIndecx, {
+    TicketID: ticket_id,
+    brand,
+    codigo_notro,
+    destino_viagem,
+    analista
+  });
+
   if (enviarComoObservacaoInterna) {
-    dadosIndecx.ticket_id = ticket_id || '';
-    dadosIndecx.prestador = prestador || cliente_nome || '';
-    dadosIndecx.destino = destino || destino_viagem || '';
+    atribuirSePreenchido(dadosIndecx, {
+      ticket_id,
+      prestador: prestador || cliente_nome,
+      destino: destino || destino_viagem
+    });
+  } else {
+    atribuirSePreenchido(
+      dadosIndecx,
+      extrairCamposExtras(body, CAMPOS_EXTRAS_WHATSAPP)
+    );
   }
 
   if (tag_pesquisa === 'p-indecx6' || tag_pesquisa === 'p-indecx7') {
-    dadosIndecx.conversation_id = conversation_id || '';
+    atribuirSePreenchido(dadosIndecx, { conversation_id });
   }
 
-  if ((cliente_email || '').trim()) {
-    dadosIndecx.email = cliente_email.trim();
-  }
+  atribuirSePreenchido(dadosIndecx, { email: cliente_email });
 
-  if (cliente_telefone) {
-    dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
-  }
+  // Guard depois da normalizacao: valor so com nao-digitos nao vira telefone "".
+  const telefoneDigitos = String(cliente_telefone || '').replace(/\D/g, '');
+  atribuirSePreenchido(dadosIndecx, { telefone: telefoneDigitos });
 
   const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
   const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);

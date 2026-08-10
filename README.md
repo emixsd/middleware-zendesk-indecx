@@ -36,14 +36,43 @@ Tag `pesquisa-reembolso` gera o link e adiciona um comentario **publico** no
 ticket. O corpo do email varia por `tipo_mensagem` (`p-reem-ap` ou `p-reem-neg`).
 `ticket_id` obrigatorio.
 
+Se `tipo_mensagem` vier ausente ou com um valor desconhecido, o email sai com um
+corpo **neutro**, que nao afirma se o reembolso foi aprovado ou negado — evita
+mandar a mensagem errada para o cliente sem deixar de enviar a pesquisa. Nesse
+caso a resposta traz `tipoMensagemUsado: "neutro"` e o log registra
+`TIPO_MENSAGEM NAO RECONHECIDO`; se isso aparecer com frequencia, o campo no
+gatilho do Zendesk provavelmente esta quebrado.
+
 ## Seguranca
 
-- `WEBHOOK_SECRET`: se definida, toda requisicao POST (nos dois endpoints)
-  precisa enviar o header `X-Webhook-Secret` com esse mesmo valor; caso
-  contrario recebe `401`. Enquanto nao estiver definida, a autenticacao fica
-  desativada (modo legado) e os endpoints aceitam qualquer POST, apenas
-  registrando um aviso no log. Configure a env e o header no webhook do Zendesk
-  para ativar a protecao sem downtime.
+- `WEBHOOK_SECRET` (**obrigatoria**): toda requisicao POST, nos dois endpoints,
+  precisa enviar o header `X-Webhook-Secret` com esse mesmo valor; caso contrario
+  recebe `401`. A comparacao e timing-safe sobre hashes SHA-256, entao nao vaza
+  tamanho nem conteudo do segredo.
+
+  O comportamento e **fail-closed**: se a variavel nao existir no ambiente, todo
+  POST e rejeitado com `401` e o log registra `ERRO DE CONFIG`. Ou seja, esquecer
+  a env quebra a integracao de forma visivel — nunca deixa o endpoint aberto.
+
+  Ao girar o segredo, atualize a env na Vercel **e** o header no webhook do
+  Zendesk. Enquanto os dois estiverem diferentes, o Zendesk recebe `401`.
+
+  `GET` nao exige o header: serve como health-check e nao expoe nada.
+
+### Verificando a protecao
+
+Tag invalida nao chega a chamar IndeCX nem Zendesk, entao serve como teste
+seguro (nao dispara email nem WhatsApp):
+
+```bash
+# esperado: 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$URL/api/email" \
+  -H "Content-Type: application/json" -d '{"tag_pesquisa":"x"}'
+
+# esperado: 200 {"success":false,"error":"Tag não mapeada"}
+curl -s -X POST "$URL/api/email" -H "Content-Type: application/json" \
+  -H "X-Webhook-Secret: $WEBHOOK_SECRET" -d '{"tag_pesquisa":"x"}'
+```
 
 ## Variaveis de ambiente
 

@@ -5,7 +5,7 @@ const { gerarLinkPesquisa } = require('../lib/indecx');
 const { addTicketComment } = require('../lib/zendesk');
 const { enviarMensagemWhatsApp } = require('../lib/smooch');
 const {
-  resolveActionId,
+  resolveMapped,
   isValidTicketId,
   isValidConversationId,
   escapeHtml
@@ -53,7 +53,7 @@ async function handle(body, req, res) {
   } = body;
 
   const enviarComoObservacaoInterna = tag_pesquisa === INDECX_INTERNAL_EMAIL_TAG;
-  const actionId = resolveActionId(TAG_TO_ACTION, tag_pesquisa);
+  const actionId = resolveMapped(TAG_TO_ACTION, tag_pesquisa);
 
   if (!actionId) {
     return res.status(200).json({ success: false, error: 'Tag não mapeada' });

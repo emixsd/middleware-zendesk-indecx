@@ -4,7 +4,8 @@
 const { createWebhookHandler } = require('../lib/handler');
 const { gerarLinkPesquisa } = require('../lib/indecx');
 const { addTicketComment } = require('../lib/zendesk');
-const { resolveActionId, isValidTicketId } = require('../lib/request');
+const { resolveMapped, isValidTicketId } = require('../lib/request');
+const { truncate } = require('../lib/log');
 
 // TODO: substituir pelos valores reais quando tiver.
 const TAG_TO_ACTION = {
@@ -27,6 +28,29 @@ const CORPOS_EMAIL = {
     `👉 Avaliar experiência: ${link}`
 };
 
+// Fallback para `tipo_mensagem` ausente ou desconhecido. Nao afirma nenhum
+// resultado (nem aprovado nem negado), so pede a avaliacao do atendimento —
+// assim serve para os dois casos sem risco de mandar a mensagem errada.
+const CORPO_NEUTRO = (nome, link) =>
+  `Olá, ${nome}!\n\n` +
+  `A análise da sua solicitação de reembolso foi finalizada.\n` +
+  `Queremos muito saber como foi sua experiência com o nosso atendimento.\n\n` +
+  `Sua opinião é essencial para melhorarmos cada vez mais!\n\n` +
+  `👉 Avaliar experiência: ${link}`;
+
+// Escolhe o corpo do email a partir de `tipo_mensagem`. Funcao pura e exportada
+// para teste — a decisao de qual texto vai para o cliente e o ponto de maior
+// consequencia deste endpoint.
+//
+// Retorna { templateFn, usouNeutro, tipoUsado }.
+function escolherCorpo(tipoMensagem) {
+  const templateFn = resolveMapped(CORPOS_EMAIL, tipoMensagem);
+  if (templateFn) {
+    return { templateFn, usouNeutro: false, tipoUsado: tipoMensagem };
+  }
+  return { templateFn: CORPO_NEUTRO, usouNeutro: true, tipoUsado: 'neutro' };
+}
+
 async function handle(body, req, res) {
   const {
     ticket_id,
@@ -41,7 +65,7 @@ async function handle(body, req, res) {
     analista
   } = body;
 
-  const actionId = resolveActionId(TAG_TO_ACTION, tag_pesquisa);
+  const actionId = resolveMapped(TAG_TO_ACTION, tag_pesquisa);
 
   if (!actionId) {
     return res.status(200).json({ success: false, error: 'Tag não mapeada' });
@@ -73,7 +97,18 @@ async function handle(body, req, res) {
 
   const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
 
-  const templateFn = CORPOS_EMAIL[tipo_mensagem] || CORPOS_EMAIL['p-reem-ap'];
+  const { templateFn, usouNeutro, tipoUsado } = escolherCorpo(tipo_mensagem);
+
+  if (usouNeutro) {
+    // Nao deve acontecer em operacao normal: indica campo vazio no gatilho do
+    // Zendesk ou tipo novo sem template. O email sai (neutro), mas fica o aviso
+    // para nao passar meses mandando neutro sem ninguem notar.
+    console.warn(
+      'TIPO_MENSAGEM NAO RECONHECIDO — usando corpo neutro. recebido:',
+      truncate(tipo_mensagem, 60)
+    );
+  }
+
   const corpo = templateFn(cliente_nome || 'Cliente', linkPesquisa);
 
   await addTicketComment(ticket_id, { body: corpo, public: true });
@@ -82,6 +117,7 @@ async function handle(body, req, res) {
     success: true,
     actionId,
     link: linkPesquisa,
+    tipoMensagemUsado: tipoUsado,
     message: 'Comentário adicionado no ticket — email enviado pelo Zendesk!'
   });
 }
@@ -90,3 +126,7 @@ module.exports = createWebhookHandler(handle, {
   logLabel: 'REQUISIÇÃO RECEBIDA (email)',
   healthMessage: 'Middleware Zendesk-IndeCX (email) funcionando!'
 });
+
+// Exportado apenas para teste. A Vercel usa o module.exports (a funcao handler)
+// e ignora propriedades extras penduradas nela.
+module.exports.escolherCorpo = escolherCorpo;

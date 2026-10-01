@@ -4,7 +4,9 @@
 const { createWebhookHandler } = require('../lib/handler');
 const { gerarLinkPesquisa } = require('../lib/indecx');
 const { addTicketComment } = require('../lib/zendesk');
-const { resolveMapped, isValidTicketId } = require('../lib/request');
+const { resolveMapped, isValidTicketId, sanitizeNome } = require('../lib/request');
+const { atribuirSePreenchido } = require('../lib/payload');
+const { umaVezPorJanela } = require('../lib/dedupe');
 const { truncate } = require('../lib/log');
 
 // TODO: substituir pelos valores reais quando tiver.
@@ -78,24 +80,21 @@ async function handle(body, req, res) {
     return res.status(200).json({ success: false, error: 'Ticket ID inválido' });
   }
 
-  const dadosIndecx = {
-    nome: cliente_nome || 'Cliente',
+  // Mesmo nome limpo no IndeCX e no texto do email publico.
+  const nome = sanitizeNome(cliente_nome, 'Cliente');
+
+  // Vazio nao entra no payload (igual ao fluxo WhatsApp): no IndeCX o
+  // indicador fica sem valor, em vez de com "".
+  const dadosIndecx = { nome };
+  atribuirSePreenchido(dadosIndecx, {
     TicketID: ticket_id,
-    brand: brand || '',
-    codigo_notro: codigo_notro || '',
-    destino_viagem: destino_viagem || '',
-    analista: analista || ''
-  };
-
-  if ((cliente_email || '').trim()) {
-    dadosIndecx.email = cliente_email.trim();
-  }
-
-  if (cliente_telefone) {
-    dadosIndecx.telefone = String(cliente_telefone).replace(/\D/g, '');
-  }
-
-  const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
+    brand,
+    codigo_notro,
+    destino_viagem,
+    analista,
+    email: cliente_email,
+    telefone: String(cliente_telefone || '').replace(/\D/g, '')
+  });
 
   const { templateFn, usouNeutro, tipoUsado } = escolherCorpo(tipo_mensagem);
 
@@ -109,14 +108,26 @@ async function handle(body, req, res) {
     );
   }
 
-  const corpo = templateFn(cliente_nome || 'Cliente', linkPesquisa);
+  const chave = 'email:' + tag_pesquisa + ':' + ticket_id;
+  const envio = await umaVezPorJanela(chave, async () => {
+    const link = await gerarLinkPesquisa(actionId, dadosIndecx);
+    await addTicketComment(ticket_id, { body: templateFn(nome, link), public: true });
+    return link;
+  });
 
-  await addTicketComment(ticket_id, { body: corpo, public: true });
+  if (envio.duplicado) {
+    console.warn('ENVIO REPETIDO IGNORADO:', chave);
+    return res.status(200).json({
+      success: true,
+      duplicado: true,
+      message: 'Pesquisa ja enviada para este ticket nos ultimos minutos; reenvio ignorado.'
+    });
+  }
 
   return res.status(200).json({
     success: true,
     actionId,
-    link: linkPesquisa,
+    link: envio.resultado,
     tipoMensagemUsado: tipoUsado,
     message: 'Comentário adicionado no ticket — email enviado pelo Zendesk!'
   });
@@ -124,7 +135,8 @@ async function handle(body, req, res) {
 
 module.exports = createWebhookHandler(handle, {
   logLabel: 'REQUISIÇÃO RECEBIDA (email)',
-  healthMessage: 'Middleware Zendesk-IndeCX (email) funcionando!'
+  healthMessage: 'Middleware Zendesk-IndeCX (email) funcionando!',
+  signingSecretEnv: 'ZENDESK_EMAIL_SIGNING_SECRET'
 });
 
 // Exportado apenas para teste. A Vercel usa o module.exports (a funcao handler)

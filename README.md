@@ -45,19 +45,84 @@ gatilho do Zendesk provavelmente esta quebrado.
 
 ## Seguranca
 
-- `WEBHOOK_SECRET` (**obrigatoria**): toda requisicao POST, nos dois endpoints,
-  precisa enviar o header `X-Webhook-Secret` com esse mesmo valor; caso contrario
-  recebe `401`. A comparacao e timing-safe sobre hashes SHA-256, entao nao vaza
-  tamanho nem conteudo do segredo.
+### Autenticacao
 
-  O comportamento e **fail-closed**: se a variavel nao existir no ambiente, todo
-  POST e rejeitado com `401` e o log registra `ERRO DE CONFIG`. Ou seja, esquecer
-  a env quebra a integracao de forma visivel — nunca deixa o endpoint aberto.
+Dois modos, escolhidos por endpoint pelas envs presentes:
 
-  Ao girar o segredo, atualize a env na Vercel **e** o header no webhook do
-  Zendesk. Enquanto os dois estiverem diferentes, o Zendesk recebe `401`.
+1. **Assinatura do Zendesk (recomendado).** Cada webhook do Zendesk tem uma
+   "Chave secreta" (tela do webhook > Detalhes). O Zendesk assina todo envio com
+   `X-Zendesk-Webhook-Signature` = base64(HMAC-SHA256(chave, timestamp + corpo)).
+   O middleware confere a assinatura sobre o corpo bruto e recusa requisicao com
+   mais de 5 minutos. Assim, quem vir um envio (print, log) nao consegue forjar
+   outro nem reaproveitar o antigo.
+   - `/api/webhook` le `ZENDESK_WEBHOOK_SIGNING_SECRET` (chave do webhook
+     "IndeCX - enviar pesquisa").
+   - `/api/email` le `ZENDESK_EMAIL_SIGNING_SECRET` (chave do webhook
+     "IndeCX - REEMBOLSO").
+   - Cada endpoint aceita so a propria chave: vazar uma nao abre o outro.
+   - Exige `NODEJS_HELPERS=0` na Vercel. Com os helpers ligados (padrao), a
+     plataforma consome o corpo antes do codigo e a assinatura nao tem como ser
+     conferida; nesse caso todo POST recebe `401` e o log mostra
+     `ERRO DE CONFIG ... NODEJS_HELPERS=0`. O codigo funciona com e sem helpers.
 
-  `GET` nao exige o header: serve como health-check e nao expoe nada.
+2. **Header fixo (legado).** Usado so quando a chave de assinatura do endpoint
+   nao esta definida. Toda requisicao POST precisa do header `X-Webhook-Secret`
+   igual a `WEBHOOK_SECRET`.
+
+Com a chave de assinatura definida, o header fixo e **ignorado** naquele
+endpoint.
+
+O comportamento e **fail-closed**: sem nenhum segredo configurado, todo POST e
+rejeitado com `401` e o log registra `ERRO DE CONFIG`. Esquecer a env quebra a
+integracao de forma visivel, nunca deixa o endpoint aberto. As comparacoes sao
+timing-safe.
+
+`GET` nao exige autenticacao: serve como health-check e nao expoe nada.
+
+### Ativando a assinatura (uma vez)
+
+Faca um endpoint por vez, testando entre os passos.
+
+1. Na Vercel, adicione `NODEJS_HELPERS=0` e faca redeploy. O header fixo
+   continua valendo; confira que os envios seguem com `SMOOCH OK` /
+   `ZENDESK OK` nos logs.
+2. No Zendesk, abra o webhook, clique em "Revelar segredo" e copie a chave.
+3. Na Vercel, cadastre a chave em `ZENDESK_WEBHOOK_SIGNING_SECRET` (ou
+   `ZENDESK_EMAIL_SIGNING_SECRET`) e faca redeploy.
+4. No Zendesk, use "Testar webhook" com um body de tag invalida
+   (`{"tag_pesquisa":"x"}`): esperado `200 {"success":false,"error":"Tag não mapeada"}`.
+   `401` = chave errada ou `NODEJS_HELPERS` faltando (o log diz qual).
+5. Depois que os dois endpoints estiverem assinados, o header `X-Webhook-Secret`
+   pode sair do webhook do Zendesk e `WEBHOOK_SECRET` da Vercel.
+
+Para voltar atras, basta remover a env de assinatura e fazer redeploy: o
+endpoint volta ao header fixo.
+
+### Trocando segredos sem derrubar
+
+Todas as envs de segredo aceitam varios valores separados por virgula. Para
+trocar: cadastre `novo,antigo` na Vercel, redeploy, troque no Zendesk
+("Redefinir segredo" ou o header) e depois deixe so `novo`.
+
+### Outras protecoes
+
+- **Logs sem dado pessoal.** Nome, email e telefone do body sao mascarados, e
+  todo corpo de resposta/erro da IndeCX, do Smooch e do Zendesk passa por
+  `safeDetail` (lib/log.js), que mascara PII por nome de campo e por conteudo
+  (email, telefone de 10 a 13 digitos) antes de logar.
+- **Nome do cliente limpo.** O nome vem do requester, que o cliente controla
+  (perfil do WhatsApp, "From" do email), e entra no email publico e na
+  pesquisa. `sanitizeNome` remove URL, dominio solto e quebra de linha e limita a
+  60 caracteres. Os demais campos repassados a IndeCX sao limitados a 200.
+- **Envio repetido.** A mesma pesquisa para o mesmo ticket e ignorada por 10
+  minutos (resposta `duplicado: true`, log `ENVIO REPETIDO IGNORADO`). Cobre o
+  reenvio do Zendesk quando a resposta demora. E melhor esforco: o estado fica
+  na memoria da instancia, entao um reenvio em outra instancia passa.
+- **Link da pesquisa.** Usa o primeiro link `https` devolvido pela IndeCX. Se so
+  vier `http`, envia assim mesmo e loga `INDECX LINK SEM HTTPS`. Todo link gerado
+  fica no log (`INDECX LINK GERADO`), para conferir qual convite o cliente
+  recebeu.
+- **Corpo limitado** a 100 KB (`413` acima disso).
 
 ### Verificando a protecao
 
@@ -97,10 +162,27 @@ Somente `/api/webhook` (WhatsApp/Smooch):
 - `SMOOCH_KEY_ID`
 - `SMOOCH_SECRET`
 
+Autenticacao (ver secao Seguranca; pelo menos uma por endpoint):
+
+- `ZENDESK_WEBHOOK_SIGNING_SECRET`: chave de assinatura do webhook de `/api/webhook`.
+- `ZENDESK_EMAIL_SIGNING_SECRET`: chave de assinatura do webhook de `/api/email`.
+- `NODEJS_HELPERS=0`: obrigatoria quando alguma chave de assinatura estiver definida.
+- `WEBHOOK_SECRET`: header fixo (legado), usado so onde nao ha chave de assinatura.
+
 Opcionais:
 
-- `WEBHOOK_SECRET` (ver secao Seguranca).
 - `HTTP_TIMEOUT_MS`: timeout das chamadas externas em ms (padrao `10000`).
+
+## Testes
+
+```bash
+npm test
+```
+
+Usa o `node:test` nativo, sem dependencias. Cobre autenticacao (assinatura,
+replay, header legado, com e sem helpers da Vercel), redacao de logs, limpeza do
+nome, bloqueio de reenvio e o fluxo completo dos dois endpoints com as APIs
+simuladas.
 
 ## Migracao dos webhooks (repos antigos -> unificado)
 

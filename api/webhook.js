@@ -8,9 +8,11 @@ const {
   resolveMapped,
   isValidTicketId,
   isValidConversationId,
-  escapeHtml
+  escapeHtml,
+  sanitizeNome
 } = require('../lib/request');
 const { atribuirSePreenchido, extrairCamposExtras } = require('../lib/payload');
+const { umaVezPorJanela } = require('../lib/dedupe');
 
 const INDECX_INTERNAL_EMAIL_TAG = 'p-indecx11-m';
 
@@ -105,8 +107,8 @@ async function handle(body, req, res) {
   // atribuirSePreenchido, que omite vazio em vez de mandar "" ao IndeCX.
   const dadosIndecx = {
     nome: enviarComoObservacaoInterna
-      ? analista || prestador || cliente_nome || 'Agente'
-      : cliente_nome || 'Cliente'
+      ? sanitizeNome(analista || prestador || cliente_nome, 'Agente')
+      : sanitizeNome(cliente_nome, 'Cliente')
   };
 
   atribuirSePreenchido(dadosIndecx, {
@@ -141,33 +143,42 @@ async function handle(body, req, res) {
   atribuirSePreenchido(dadosIndecx, { telefone: telefoneDigitos });
 
   const isSpanish = SPANISH_TAGS.has(tag_pesquisa);
-  const linkPesquisa = await gerarLinkPesquisa(actionId, dadosIndecx);
 
-  if (enviarComoObservacaoInterna) {
-    await addTicketComment(ticket_id, {
-      htmlBody: montarObservacaoInterna(linkPesquisa),
-      public: false
-    });
+  const chave = 'webhook:' + tag_pesquisa + ':' + (ticket_id || conversation_id);
+  const envio = await umaVezPorJanela(chave, async () => {
+    const link = await gerarLinkPesquisa(actionId, dadosIndecx);
+    if (enviarComoObservacaoInterna) {
+      await addTicketComment(ticket_id, {
+        htmlBody: montarObservacaoInterna(link),
+        public: false
+      });
+    } else {
+      await enviarMensagemWhatsApp(conversation_id, link, isSpanish);
+    }
+    return link;
+  });
 
+  if (envio.duplicado) {
+    console.warn('ENVIO REPETIDO IGNORADO:', chave);
     return res.status(200).json({
       success: true,
-      actionId,
-      link: linkPesquisa,
-      message: 'Pesquisa enviada como observacao interna no ticket!'
+      duplicado: true,
+      message: 'Pesquisa ja enviada para este ticket nos ultimos minutos; reenvio ignorado.'
     });
   }
-
-  await enviarMensagemWhatsApp(conversation_id, linkPesquisa, isSpanish);
 
   return res.status(200).json({
     success: true,
     actionId,
-    link: linkPesquisa,
-    message: 'Mensagem enviada no WhatsApp!'
+    link: envio.resultado,
+    message: enviarComoObservacaoInterna
+      ? 'Pesquisa enviada como observacao interna no ticket!'
+      : 'Mensagem enviada no WhatsApp!'
   });
 }
 
 module.exports = createWebhookHandler(handle, {
   logLabel: 'DADOS RECEBIDOS',
-  healthMessage: 'Middleware Zendesk-IndeCX (whatsapp/nota) funcionando!'
+  healthMessage: 'Middleware Zendesk-IndeCX (whatsapp/nota) funcionando!',
+  signingSecretEnv: 'ZENDESK_WEBHOOK_SIGNING_SECRET'
 });

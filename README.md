@@ -89,11 +89,16 @@ Faca um endpoint por vez, testando entre os passos.
 2. No Zendesk, abra o webhook, clique em "Revelar segredo" e copie a chave.
 3. Na Vercel, cadastre a chave em `ZENDESK_WEBHOOK_SIGNING_SECRET` (ou
    `ZENDESK_EMAIL_SIGNING_SECRET`) e faca redeploy.
-4. No Zendesk, use "Testar webhook" com um body de tag invalida
-   (`{"tag_pesquisa":"x"}`): esperado `200 {"success":false,"error":"Tag não mapeada"}`.
-   `401` = chave errada ou `NODEJS_HELPERS` faltando (o log diz qual).
-5. Depois que os dois endpoints estiverem assinados, o header `X-Webhook-Secret`
-   pode sair do webhook do Zendesk e `WEBHOOK_SECRET` da Vercel.
+4. Confira nos logs da Vercel um envio **real** depois do redeploy: esperado
+   `SMOOCH OK` / `ZENDESK OK`. `WEBHOOK NAO AUTORIZADO: assinatura ...` = chave
+   errada; `ERRO DE CONFIG ... NODEJS_HELPERS=0` = env faltando ou sem redeploy.
+   Nao use o "Testar webhook" para isso: o Zendesk assina o teste com uma chave
+   fixa de teste, nao com a do webhook, entao ele recebe `401` mesmo com tudo
+   certo. Nao cadastre essa chave de teste na Vercel: ela e publica.
+5. Depois que os dois endpoints estiverem assinados, mude a autenticacao dos
+   webhooks no Zendesk para "Nenhuma" (a assinatura continua sendo enviada) e
+   remova `WEBHOOK_SECRET` da Vercel. Um envio real com `SMOOCH OK` /
+   `ZENDESK OK` depois disso confirma que so a assinatura esta valendo.
 
 Para voltar atras, basta remover a env de assinatura e fazer redeploy: o
 endpoint volta ao header fixo.

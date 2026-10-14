@@ -32,6 +32,13 @@ const TAG_TO_ACTION = {
 
 const SPANISH_TAGS = new Set(['p-indecx8-es', 'p-indecx9-es', 'p-indecx10-es']);
 
+// Agente de IA do Zendesk: chama por "integracao de API", que nao assina como
+// os webhooks. Usa segredo proprio (env ZENDESK_AI_AGENT_SECRET no header
+// X-Webhook-Secret) e so pode enviar as pesquisas da IA — se esse segredo
+// vazar, nao serve para disparar as pesquisas dos gatilhos.
+const AGENTE_IA = 'agente-ia';
+const AGENTE_IA_TAGS = new Set(['p-indecx6', 'p-indecx7']);
+
 // Campos extras repassados ao IndeCX no fluxo WhatsApp.
 //   chave = nome do indicador no IndeCX (crie com exatamente este nome)
 //   valor = chave esperada no body do trigger do Zendesk
@@ -55,7 +62,7 @@ function montarObservacaoInterna(linkPesquisa) {
   ].join('');
 }
 
-async function handle(body, req, res) {
+async function handle(body, req, res, { via } = {}) {
   const {
     ticket_id,
     cliente_nome,
@@ -76,6 +83,11 @@ async function handle(body, req, res) {
 
   if (!actionId) {
     return res.status(200).json({ success: false, error: 'Tag não mapeada' });
+  }
+
+  if (via === AGENTE_IA && !AGENTE_IA_TAGS.has(tag_pesquisa)) {
+    console.warn('AGENTE IA: tag fora da lista permitida:', tag_pesquisa);
+    return res.status(403).json({ success: false, error: 'Tag não permitida para o agente de IA' });
   }
 
   if (!enviarComoObservacaoInterna) {
@@ -180,5 +192,6 @@ async function handle(body, req, res) {
 module.exports = createWebhookHandler(handle, {
   logLabel: 'DADOS RECEBIDOS',
   healthMessage: 'Middleware Zendesk-IndeCX (whatsapp/nota) funcionando!',
-  signingSecretEnv: 'ZENDESK_WEBHOOK_SIGNING_SECRET'
+  signingSecretEnv: 'ZENDESK_WEBHOOK_SIGNING_SECRET',
+  callerSecretEnvs: [{ nome: AGENTE_IA, env: 'ZENDESK_AI_AGENT_SECRET' }]
 });

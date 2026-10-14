@@ -36,7 +36,7 @@ test('parseSecrets aceita lista separada por virgula e ignora vazios', () => {
 });
 
 test('assinatura Zendesk valida e aceita', () => {
-  assert.deepEqual(authorize(signedReq(), signing()), { ok: true });
+  assert.deepEqual(authorize(signedReq(), signing()), { ok: true, via: 'assinatura' });
 });
 
 test('assinatura com segredo errado e rejeitada', () => {
@@ -101,4 +101,42 @@ test('sem nenhum segredo configurado: fail-closed com erro de config', () => {
   });
   assert.equal(r.ok, false);
   assert.equal(r.config, true);
+});
+
+// --- Chamador sem assinatura (agente de IA) com segredo proprio
+
+const ia = (secrets = ['segredo-ia']) => [{ nome: 'agente-ia', secrets }];
+
+test('agente IA: segredo proprio e aceito mesmo com assinatura ligada', () => {
+  const req = { headers: { 'x-webhook-secret': 'segredo-ia' } };
+  assert.deepEqual(authorize(req, signing({ callerSecrets: ia() })), { ok: true, via: 'agente-ia' });
+});
+
+test('agente IA: segredo errado e rejeitado', () => {
+  const req = { headers: { 'x-webhook-secret': 'chute' } };
+  const r = authorize(req, signing({ callerSecrets: ia() }));
+  assert.equal(r.ok, false);
+  assert.match(r.motivo, /X-Webhook-Secret invalido/);
+});
+
+test('agente IA: WEBHOOK_SECRET antigo nao vale como segredo da IA', () => {
+  const req = { headers: { 'x-webhook-secret': 'fixo' } };
+  const r = authorize(req, signing({ staticSecrets: ['fixo'], callerSecrets: ia() }));
+  assert.equal(r.ok, false);
+});
+
+test('agente IA: env vazia nao libera header vazio nem qualquer valor', () => {
+  const opts = signing({ callerSecrets: ia([]) });
+  assert.equal(authorize({ headers: { 'x-webhook-secret': '' } }, opts).ok, false);
+  assert.equal(authorize({ headers: { 'x-webhook-secret': 'x' } }, opts).ok, false);
+});
+
+test('agente IA: assinatura do Zendesk continua funcionando junto', () => {
+  assert.equal(authorize(signedReq(), signing({ callerSecrets: ia() })).via, 'assinatura');
+});
+
+test('so o segredo da IA configurado: chamada sem header nao e erro de config', () => {
+  const r = authorize({ headers: {} }, { rawBody: RAW, signingSecrets: [], staticSecrets: [], callerSecrets: ia() });
+  assert.equal(r.ok, false);
+  assert.equal(r.config, undefined);
 });

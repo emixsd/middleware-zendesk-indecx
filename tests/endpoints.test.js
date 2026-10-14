@@ -8,6 +8,7 @@ process.env.ZENDESK_SUBDOMAIN = 'hero';
 process.env.ZENDESK_EMAIL = 'bot@hero.com';
 process.env.ZENDESK_API_TOKEN = 'zt';
 process.env.WEBHOOK_SECRET = 'fixo';
+process.env.ZENDESK_AI_AGENT_SECRET = 'segredo-ia';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -51,9 +52,9 @@ function fakeRes() {
   };
 }
 
-async function chamar(handler, body) {
+async function chamar(handler, body, secret = 'fixo') {
   const res = fakeRes();
-  const req = { method: 'POST', headers: { 'x-webhook-secret': 'fixo' }, body };
+  const req = { method: 'POST', headers: { 'x-webhook-secret': secret }, body };
   const saved = { log: console.log, warn: console.warn, error: console.error };
   const linhas = [];
   console.log = console.warn = console.error = (...a) => linhas.push(a.join(' '));
@@ -178,4 +179,57 @@ test('falha no envio libera o ticket para o reenvio do Zendesk', async () => {
   const retry = await chamar(webhook, bodyWhats);
   assert.equal(retry.res.statusCode, 200);
   assert.equal(retry.res.payload.duplicado, undefined);
+});
+
+// --- Agente de IA (integracao de API, sem assinatura)
+
+// Mesmos parametros do teste da integracao "IndeCX - enviar pesquisa" do agente.
+const bodyIa = {
+  cliente_nome: 'Plantão',
+  tag_pesquisa: 'p-indecx6',
+  conversation_id: '698fc7335e781a45bbfd6e0c',
+  analista: 'Julie',
+  ticket_id: '183220',
+  cliente_email: 'cliente@email.com',
+  cliente_telefone: '+5511999999999',
+  brand: 'Ultimate',
+  codigo_notro: 'notro',
+  destino_viagem: 'destino viagem'
+};
+
+test('agente IA: pesquisa da IA com o segredo proprio e enviada no WhatsApp', async () => {
+  dedupe._resetParaTeste();
+  stubApis();
+  const { res, linhas } = await chamar(webhook, bodyIa, 'segredo-ia');
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.success, true);
+  const invite = chamadas.find((c) => c.url.includes('/actions/ZWM2SC7X/invites'));
+  assert.equal(invite.body.customers[0].conversation_id, '698fc7335e781a45bbfd6e0c');
+  assert.ok(chamadas.some((c) => c.url.includes('/conversations/698fc7335e781a45bbfd6e0c/messages')));
+  assert.ok(linhas.some((l) => l.includes('(via agente-ia)')));
+});
+
+test('agente IA: segredo da IA nao dispara pesquisa de gatilho', async () => {
+  dedupe._resetParaTeste();
+  stubApis();
+  const { res } = await chamar(webhook, { ...bodyIa, tag_pesquisa: 'p-indecx1' }, 'segredo-ia');
+  assert.equal(res.statusCode, 403);
+  assert.equal(chamadas.length, 0);
+});
+
+test('agente IA: segredo da IA nao vale no endpoint de email', async () => {
+  dedupe._resetParaTeste();
+  stubApis();
+  const { res } = await chamar(email, { ticket_id: '1', tag_pesquisa: 'pesquisa-reembolso' }, 'segredo-ia');
+  assert.equal(res.statusCode, 401);
+  assert.equal(chamadas.length, 0);
+});
+
+test('agente IA: p-indecx7 tambem e liberada para a IA', async () => {
+  dedupe._resetParaTeste();
+  stubApis();
+  const { res } = await chamar(webhook, { ...bodyIa, tag_pesquisa: 'p-indecx7' }, 'segredo-ia');
+  assert.equal(res.statusCode, 200);
+  assert.ok(chamadas.some((c) => c.url.includes('/actions/OEOK5BH9/invites')));
 });

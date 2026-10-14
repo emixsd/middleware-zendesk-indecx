@@ -69,8 +69,19 @@ Dois modos, escolhidos por endpoint pelas envs presentes:
    nao esta definida. Toda requisicao POST precisa do header `X-Webhook-Secret`
    igual a `WEBHOOK_SECRET`.
 
-Com a chave de assinatura definida, o header fixo e **ignorado** naquele
-endpoint.
+3. **Segredo do agente de IA (so `/api/webhook`).** O agente de IA do Zendesk
+   chama o middleware por uma *integracao de API*, nao por webhook, e por isso
+   nao assina. Ele usa segredo proprio: o header `X-Webhook-Secret` igual a
+   `ZENDESK_AI_AGENT_SECRET`, aceito mesmo com a assinatura ligada. Esse segredo
+   so libera as pesquisas da IA (`p-indecx6` e `p-indecx7`); qualquer outra tag recebe `403` e o
+   log registra `AGENTE IA: tag fora da lista permitida`. Para liberar outra
+   tag, inclua em `AGENTE_IA_TAGS` (api/webhook.js).
+
+Com a chave de assinatura definida, o `WEBHOOK_SECRET` e **ignorado** naquele
+endpoint. O segredo da IA nunca vale no lugar dele, nem no `/api/email`.
+
+O log de cada requisicao aceita diz quem autenticou:
+`DADOS RECEBIDOS (via assinatura|agente-ia|legado)`.
 
 O comportamento e **fail-closed**: sem nenhum segredo configurado, todo POST e
 rejeitado com `401` e o log registra `ERRO DE CONFIG`. Esquecer a env quebra a
@@ -171,6 +182,8 @@ Autenticacao (ver secao Seguranca; pelo menos uma por endpoint):
 
 - `ZENDESK_WEBHOOK_SIGNING_SECRET`: chave de assinatura do webhook de `/api/webhook`.
 - `ZENDESK_EMAIL_SIGNING_SECRET`: chave de assinatura do webhook de `/api/email`.
+- `ZENDESK_AI_AGENT_SECRET`: segredo da integracao de API do agente de IA
+  (header `X-Webhook-Secret`), so em `/api/webhook` e so para `p-indecx6` e `p-indecx7`.
 - `NODEJS_HELPERS=0`: obrigatoria quando alguma chave de assinatura estiver definida.
 - `WEBHOOK_SECRET`: header fixo (legado), usado so onde nao ha chave de assinatura.
 

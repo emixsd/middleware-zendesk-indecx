@@ -5,7 +5,6 @@ const { sanitizeNome } = require('../lib/request');
 const { valorLimpo } = require('../lib/payload');
 const dedupe = require('../lib/dedupe');
 const { escolherLink } = require('../lib/indecx');
-const { escolherCorpo } = require('../api/email');
 
 // --- log
 
@@ -119,13 +118,4 @@ test('escolherLink aceita http como ultimo recurso e rejeita lixo', () => {
   }
   assert.equal(escolherLink({ shortUrl: 'javascript:alert(1)' }), null);
   assert.equal(escolherLink({}), null);
-});
-
-// --- email
-
-test('escolherCorpo: tipos conhecidos e fallback neutro', () => {
-  assert.equal(escolherCorpo('p-reem-ap').usouNeutro, false);
-  assert.equal(escolherCorpo('p-reem-neg').usouNeutro, false);
-  assert.equal(escolherCorpo('').tipoUsado, 'neutro');
-  assert.equal(escolherCorpo('constructor').tipoUsado, 'neutro');
 });

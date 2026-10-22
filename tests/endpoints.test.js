@@ -149,7 +149,7 @@ test('email: comentario publico com nome limpo e sem campos vazios no IndeCX', a
   });
 
   assert.equal(res.statusCode, 200);
-  assert.equal(res.payload.tipoMensagemUsado, 'p-reem-neg');
+  assert.equal(res.payload.tipoMensagemUsado, 'unico');
 
   const invite = chamadas.find((c) => c.url.includes('/actions/L85YSV7C/invites'));
   assert.deepEqual(Object.keys(invite.body.customers[0]).sort(), ['TicketID', 'brand', 'email', 'nome']);
@@ -158,6 +158,34 @@ test('email: comentario publico com nome limpo e sem campos vazios no IndeCX', a
   assert.equal(comentario.public, true);
   assert.ok(!comentario.body.includes('golpe.io'));
   assert.ok(comentario.body.includes('👉 Avaliar experiência: https://indecx.com/s/abc'));
+});
+
+test('email: todos os tipos de mensagem enviam o mesmo texto', async () => {
+  for (const tipo of ['p-reem-ap', 'p-reem-neg', '', 'desconhecido', undefined]) {
+    dedupe._resetParaTeste();
+    stubApis();
+    const body = {
+      ticket_id: '889',
+      cliente_nome: 'Ana',
+      tag_pesquisa: 'pesquisa-reembolso'
+    };
+    if (tipo !== undefined) body.tipo_mensagem = tipo;
+    const { res, linhas } = await chamar(email, body);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.success, true);
+    assert.equal(res.payload.tipoMensagemUsado, 'unico');
+    const comentario = chamadas.find((c) => c.metodo === 'PUT').body.ticket.comment;
+    assert.equal(comentario.public, true);
+    assert.equal(comentario.body, [
+      'Olá, Ana!',
+      'Sua solicitação de reembolso teve a análise concluída.',
+      'Queremos saber como foi sua experiência com nosso atendimento durante esse processo. Sua opinião é muito importante para continuarmos evoluindo!',
+      '',
+      '👉 Avaliar experiência: https://indecx.com/s/abc'
+    ].join('\n'));
+    assert.ok(!linhas.some((linha) => linha.includes('TIPO_MENSAGEM NAO RECONHECIDO')));
+  }
 });
 
 test('falha no envio libera o ticket para o reenvio do Zendesk', async () => {

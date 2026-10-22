@@ -33,15 +33,13 @@ Avalie a atuacao do prestador nesse caso
 ### `/api/email` — comentario publico
 
 Tag `pesquisa-reembolso` gera o link e adiciona um comentario **publico** no
-ticket. O corpo do email varia por `tipo_mensagem` (`p-reem-ap` ou `p-reem-neg`).
+ticket. Todos os pedidos usam a mesma mensagem, com o nome do cliente e o link
+da pesquisa.
 `ticket_id` obrigatorio.
 
-Se `tipo_mensagem` vier ausente ou com um valor desconhecido, o email sai com um
-corpo **neutro**, que nao afirma se o reembolso foi aprovado ou negado — evita
-mandar a mensagem errada para o cliente sem deixar de enviar a pesquisa. Nesse
-caso a resposta traz `tipoMensagemUsado: "neutro"` e o log registra
-`TIPO_MENSAGEM NAO RECONHECIDO`; se isso aparecer com frequencia, o campo no
-gatilho do Zendesk provavelmente esta quebrado.
+O campo `tipo_mensagem` e ignorado e pode ser omitido. Gatilhos existentes que
+enviam `p-reem-ap` ou `p-reem-neg` continuam funcionando com a mensagem unica.
+A resposta traz `tipoMensagemUsado: "unico"`.
 
 ## Seguranca
 

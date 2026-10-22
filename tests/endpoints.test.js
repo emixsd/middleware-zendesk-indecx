@@ -188,6 +188,29 @@ test('email: todos os tipos de mensagem enviam o mesmo texto', async () => {
   }
 });
 
+test('email: pesquisa-reembolso-es usa a action em espanhol e o texto em espanhol', async () => {
+  dedupe._resetParaTeste();
+  stubApis();
+  const { res } = await chamar(email, {
+    ticket_id: '890',
+    cliente_nome: 'Lucía',
+    tag_pesquisa: 'pesquisa-reembolso-es'
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.actionId, 'LTSN7UZU');
+  assert.ok(chamadas.some((c) => c.url.includes('/actions/LTSN7UZU/invites')));
+  const comentario = chamadas.find((c) => c.metodo === 'PUT').body.ticket.comment;
+  assert.equal(comentario.public, true);
+  assert.equal(comentario.body, [
+    '¡Hola, Lucía!',
+    'Ya concluimos el análisis de tu solicitud de reembolso.',
+    'Queremos saber cómo fue tu experiencia con nuestra atención durante este proceso. ¡Tu opinión es muy importante para que sigamos mejorando!',
+    '',
+    '👉 Evaluar experiencia: https://indecx.com/s/abc'
+  ].join('\n'));
+});
+
 test('falha no envio libera o ticket para o reenvio do Zendesk', async () => {
   dedupe._resetParaTeste();
   stubApis();

@@ -10,16 +10,26 @@ const { umaVezPorJanela } = require('../lib/dedupe');
 
 // TODO: substituir pelos valores reais quando tiver.
 const TAG_TO_ACTION = {
-  'pesquisa-reembolso': 'L85YSV7C'
+  'pesquisa-reembolso': 'L85YSV7C',
+  'pesquisa-reembolso-es': 'LTSN7UZU'
 };
 
-// Mensagem unica para todos os pedidos, independentemente de tipo_mensagem.
-const corpoEmail = (nome, link) =>
-  `Olá, ${nome}!\n` +
-  `Sua solicitação de reembolso teve a análise concluída.\n` +
-  `Queremos saber como foi sua experiência com nosso atendimento durante esse processo. ` +
-  `Sua opinião é muito importante para continuarmos evoluindo!\n\n` +
-  `👉 Avaliar experiência: ${link}`;
+const SPANISH_TAGS = new Set(['pesquisa-reembolso-es']);
+
+// Mensagem unica para todos os pedidos (por idioma), independentemente de
+// tipo_mensagem.
+const corpoEmail = (nome, link, isSpanish = false) =>
+  isSpanish
+    ? `¡Hola, ${nome}!\n` +
+      `Ya concluimos el análisis de tu solicitud de reembolso.\n` +
+      `Queremos saber cómo fue tu experiencia con nuestra atención durante este proceso. ` +
+      `¡Tu opinión es muy importante para que sigamos mejorando!\n\n` +
+      `👉 Evaluar experiencia: ${link}`
+    : `Olá, ${nome}!\n` +
+      `Sua solicitação de reembolso teve a análise concluída.\n` +
+      `Queremos saber como foi sua experiência com nosso atendimento durante esse processo. ` +
+      `Sua opinião é muito importante para continuarmos evoluindo!\n\n` +
+      `👉 Avaliar experiência: ${link}`;
 
 async function handle(body, req, res) {
   const {
@@ -66,7 +76,10 @@ async function handle(body, req, res) {
   const chave = 'email:' + tag_pesquisa + ':' + ticket_id;
   const envio = await umaVezPorJanela(chave, async () => {
     const link = await gerarLinkPesquisa(actionId, dadosIndecx);
-    await addTicketComment(ticket_id, { body: corpoEmail(nome, link), public: true });
+    await addTicketComment(ticket_id, {
+      body: corpoEmail(nome, link, SPANISH_TAGS.has(tag_pesquisa)),
+      public: true
+    });
     return link;
   });
 

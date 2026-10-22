@@ -35,6 +35,10 @@ Avalie a atuacao do prestador nesse caso
 Tag `pesquisa-reembolso` gera o link e adiciona um comentario **publico** no
 ticket. Todos os pedidos usam a mesma mensagem, com o nome do cliente e o link
 da pesquisa.
+
+Tag `pesquisa-reembolso-es` faz o mesmo em espanhol: usa a action em espanhol
+da IndeCX (`LTSN7UZU`) e o texto do comentario sai em espanhol. A tag e
+comparada exatamente, entao no gatilho ela vai em minusculas.
 `ticket_id` obrigatorio.
 
 O campo `tipo_mensagem` e ignorado e pode ser omitido. Gatilhos existentes que
